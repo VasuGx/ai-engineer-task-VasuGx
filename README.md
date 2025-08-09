@@ -2,6 +2,14 @@
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/vgbm4cZ0)
 
+## 📬 Contact
+
+**Name:** Vasu Gupta  
+**Email:** vasugupta@example.com  
+**GitHub:** [VasuGx](https://github.com/VasuGx)  
+**LinkedIn:** [Vasu Gupta](https://www.linkedin.com/in/vasugupta)  
+
+
 This repository contains the source code for an AI-powered legal assistant designed to review, validate, and help prepare documentation for business incorporation and compliance within the Abu Dhabi Global Market (ADGM) jurisdiction.
 
 The agent leverages a Retrieval-Augmented Generation (RAG) architecture, using LangChain, Google Gemini, and a FAISS vector store to ensure its analysis is grounded in a specific knowledge base of legal documents.
