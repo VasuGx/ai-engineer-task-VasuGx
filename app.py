@@ -9,8 +9,9 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
-from langchain.chains.retrieval_qa import RetrievalQA
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+from langchain_core.documents import Document
 
 # --- 1. CONFIGURATION & INITIALIZATION ---
 load_dotenv()
@@ -29,6 +30,7 @@ embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
 # Load the FAISS vector store
 db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+retriever = db.as_retriever(search_kwargs={"k": 5}) # Use 5 relevant chunks
 
 # --- 2. DOCUMENT CHECKLIST & PROCESS IDENTIFICATION ---
 DOCUMENT_CHECKLISTS = {
@@ -65,31 +67,24 @@ def highlight_and_comment(doc, issue):
     """Adds highlights and comments to the docx object for a single issue."""
     text_to_find = issue.get("offending_text", "")
     if not text_to_find:
-        return # Cannot highlight if we don't know what text to look for
+        return
 
     comment_text = f"Issue: {issue.get('issue', 'N/A')}\nSuggestion: {issue.get('suggestion', 'N/A')}"
     
-    # Iterate through paragraphs to find and highlight text
     for para in doc.paragraphs:
         if text_to_find.lower() in para.text.lower():
-            # Highlighting is done by splitting a paragraph into runs
-            # This is a simplified implementation. Complex formatting might be lost.
-            inline = para.runs
-            # Replace the paragraph's text with a new set of runs
-            para.clear()
-            # Split text based on the found issue text (case-insensitive)
-            parts = para.text.split(text_to_find)
-            for i, part in enumerate(parts):
-                para.add_run(part)
-                if i < len(parts) - 1:
-                    # Add the highlighted run
-                    highlighted_run = para.add_run(text_to_find)
-                    highlighted_run.font.color.rgb = RGBColor(255, 0, 0) # Red color
-                    highlighted_run.bold = True
+            # This is a simplified highlighting method. It might not preserve complex formatting within the paragraph.
+            # It works by re-building the paragraph run by run.
+            original_runs = para.runs
+            para.clear() # Clears the paragraph content but keeps formatting
             
-            # Add the comment to the paragraph
+            # Rebuild the paragraph, highlighting the target text
+            # This is a placeholder for a more robust highlighting logic
+            # A simple approach is to just color the whole paragraph's text
+            run = para.add_run(para.text)
+            run.font.color.rgb = RGBColor(255, 0, 0)
             para.add_comment(comment_text, author="Corporate Agent")
-            return # Stop after finding the first occurrence in a paragraph
+            return # Stop after the first find
 
 def create_reviewed_docx(original_file, issues_found):
     """Creates a new .docx file with highlights and comments."""
@@ -111,14 +106,13 @@ def create_reviewed_docx(original_file, issues_found):
     doc.save(reviewed_filepath)
     return reviewed_filepath
 
-# --- 4. LANGCHAIN RAG ANALYSIS ---
+# --- 4. LANGCHAIN RAG ANALYSIS (Updated with LCEL) ---
 def analyze_document_with_langchain(doc_text, doc_name):
-    """Analyzes a document using a LangChain RetrievalQA chain."""
+    """Analyzes a document using the latest LangChain Expression Language (LCEL) retrieval chain."""
     
-    # Define the prompt template for the final analysis
     prompt_template = """
     You are an AI legal assistant specializing in Abu Dhabi Global Market (ADGM) regulations.
-    Your task is to review the legal document named '{doc_name}' based on the provided context.
+    Your task is to review the legal document based on the provided context.
 
     **Instructions:**
     1. Use the **Provided ADGM Legal Context** below to ensure your analysis is accurate.
@@ -140,36 +134,28 @@ def analyze_document_with_langchain(doc_text, doc_name):
     **Provided ADGM Legal Context:**
     {context}
     ---
-    **Document Text for Analysis:**
-    {question}
-    ---
-
-    Now, provide your analysis as a single JSON list.
+    
+    Now, provide your analysis for the document.
     """
     
-    PROMPT = PromptTemplate(
-        template=prompt_template, input_variables=["context", "question", "doc_name"]
-    )
+    prompt = PromptTemplate.from_template(prompt_template)
     
-    # Create the RetrievalQA chain
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=db.as_retriever(search_kwargs={"k": 4}), # Retrieve top 4 relevant chunks
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": PROMPT.partial(doc_name=doc_name)}
-    )
+    # This is the modern way to create a RAG chain with LCEL
+    question_answer_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
-    # Run the chain
     try:
-        result = qa_chain.invoke({"query": doc_text})
-        # The result from the LLM is in the 'result' key
-        # We need to find the JSON part of the string
-        json_string = result['result'].strip()
-        json_start = json_string.find('[')
-        json_end = json_string.rfind(']') + 1
+        # The input to the chain is a dictionary
+        response = rag_chain.invoke({"input": doc_text})
+        
+        # The LLM's answer is in the 'answer' key
+        answer = response.get("answer", "[]")
+        
+        # Clean the response to extract only the JSON part
+        json_start = answer.find('[')
+        json_end = answer.rfind(']') + 1
         if json_start != -1 and json_end != -1:
-            clean_json = json_string[json_start:json_end]
+            clean_json = answer[json_start:json_end]
             return json.loads(clean_json)
         else:
             return [{"issue": "Could not parse LLM response.", "severity": "Critical"}]
