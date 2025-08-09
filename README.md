@@ -5,9 +5,9 @@
 ## 📬 Contact
 
 **Name:** Vasu Gupta  
-**Email:** vasugupta@example.com  
+**Email:** vasugupta1734@gmail.com  
 **GitHub:** [VasuGx](https://github.com/VasuGx)  
-**LinkedIn:** [Vasu Gupta](https://www.linkedin.com/in/vasugupta)  
+**LinkedIn:** [Vasu Gupta](https://www.linkedin.com/in/vasu-gupta-a47549179/)  
 
 
 This repository contains the source code for an AI-powered legal assistant designed to review, validate, and help prepare documentation for business incorporation and compliance within the Abu Dhabi Global Market (ADGM) jurisdiction.
